@@ -29,6 +29,10 @@ export type WsErrorCode = (typeof WsErrorCode)[keyof typeof WsErrorCode];
 /**
  * All valid error codes as an array — useful for Zod enum schema.
  */
+
+
+// zod requires to pass in as tuple therefore we need to cast it as [WsErrorCode, ...WsErrorCode[]]
+
 export const WS_ERROR_CODES = Object.values(WsErrorCode) as [WsErrorCode, ...WsErrorCode[]];
 
 /**

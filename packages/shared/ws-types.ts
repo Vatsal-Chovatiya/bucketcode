@@ -57,45 +57,16 @@ export type PongMessage = z.infer<typeof PongSchema>;
 /** Discriminated union of every valid server → client message. */
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 
-// ─── Utility types ──────────────────────────────────────────────
-
-/**
- * Extract the payload type for a specific client → server event.
- *
- * @example
- * type P = ClientPayload<'fetchDir'>; // { path: string }
- */
 export type ClientPayload<E extends ClientMessage['event']> =
   Extract<ClientMessage, { event: E }>['payload'];
 
-/**
- * Extract the payload type for a specific server → client event.
- *
- * @example
- * type P = ServerPayload<'podReady'>; // { replId: string; previewUrl: string }
- */
 export type ServerPayload<E extends ServerMessage['event']> =
   Extract<ServerMessage, { event: E }>['payload'];
 
-/**
- * Map of client event names to their handler signatures.
- * Useful for building type-safe message routers on the Runner.
- *
- * @example
- * const handlers: ClientMessageHandlers = {
- *   fetchDir: (payload) => { ... },
- *   fetchContent: (payload) => { ... },
- *   ...
- * };
- */
 export type ClientMessageHandlers = {
   [E in ClientMessage['event']]: (payload: ClientPayload<E>) => void | Promise<void>;
-};
+};  
 
-/**
- * Map of server event names to their handler signatures.
- * Useful for building type-safe message routers on the client.
- */
 export type ServerMessageHandlers = {
   [E in ServerMessage['event']]: (payload: ServerPayload<E>) => void | Promise<void>;
 };

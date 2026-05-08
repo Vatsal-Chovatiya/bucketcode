@@ -62,16 +62,12 @@ export const RequestTerminalSchema = z.object({
   payload: z.object({
     cols: z.number().int().positive(),
     rows: z.number().int().positive(),
-    sessionId: z.string().optional(),
   }),
 });
 
 export const ClientTerminalDataSchema = z.object({
   event: z.literal('terminalData'),
-  payload: z.object({
-    data: z.string(),
-    sessionId: z.string().optional(),
-  }),
+  payload: z.string(),
 });
 
 export const PingSchema = z.object({
@@ -136,10 +132,7 @@ export const PersistDegradedSchema = z.object({
 
 export const ServerTerminalDataSchema = z.object({
   event: z.literal('terminalData'),
-  payload: z.object({
-    data: z.string(),
-    sessionId: z.string().optional(),
-  }),
+  payload: z.string(),
 });
 
 export const TerminalExitSchema = z.object({
@@ -147,7 +140,6 @@ export const TerminalExitSchema = z.object({
   payload: z.object({
     code: z.number().int(),
     signal: z.string().optional(),
-    sessionId: z.string().optional(),
   }),
 });
 
