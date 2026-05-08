@@ -11,6 +11,7 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1045.0"
+    "@aws-sdk/client-s3": "^3.1045.0",
+    "zod": "^3.24.0"
   }
 }

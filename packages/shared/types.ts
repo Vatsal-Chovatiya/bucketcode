@@ -20,6 +20,7 @@ export interface FileNode {
   path: string;
   type: 'file' | 'dir';
   size?: number;
+  children?: FileNode[];
 }
 
 export interface ValidationRule {
