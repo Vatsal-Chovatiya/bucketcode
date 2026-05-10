@@ -1,0 +1,54 @@
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ReplStatus {
+  STARTING
+  RUNNING
+  IDLE
+  TERMINATED
+}
+
+enum Language {
+  NODE_JS
+  PYTHON
+}
+
+model User {
+  id        String   @id @default(cuid()) @map("user_id")
+  email     String   @unique
+  username  String   @unique
+  repls     Repl[]
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("users")
+}
+
+model Repl {
+  id            String     @id @default(cuid()) @map("repl_id")
+  name          String
+  language      Language
+  s3Path        String     @unique
+  podName       String?    @unique
+  serviceName   String?    @unique
+  ingressName   String?    @unique
+  status        ReplStatus @default(STARTING)
+  
+  ownerId       String     @map("owner_id")
+  owner         User       @relation(fields: [ownerId], references: [id])
+  
+  previewUrl    String?    @map("preview_url")
+  runnerAddr    String?    @map("runner_addr")
+  lastActiveAt  DateTime   @default(now()) @map("last_active_at")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  @@index([ownerId, status])
+  @@map("repls")
+}
