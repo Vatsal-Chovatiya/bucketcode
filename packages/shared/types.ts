@@ -38,3 +38,39 @@ export interface S3Config {
   secretAccessKey: string;
   forcePathStyle: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Orchestrator Contracts
+// ---------------------------------------------------------------------------
+
+/** POST /start — request body */
+export interface OrchestratorStartRequest {
+  replId: string;
+  language: string;
+  tier: 'free' | 'pro';
+}
+
+/** POST /start — 202 response */
+export interface OrchestratorStartResponse {
+  runnerAddr: string;
+  previewUrl: string;
+  status: string;
+}
+
+/** POST /stop — request body */
+export interface OrchestratorStopRequest {
+  replId: string;
+}
+
+/** POST /stop — 200 response */
+export interface OrchestratorStopResponse {
+  status: string;
+}
+
+/** GET /status/:replId — 200 response */
+export interface OrchestratorStatusResponse {
+  replId: string;
+  status: string;
+  runnerAddr: string | null;
+  previewUrl: string | null;
+}
