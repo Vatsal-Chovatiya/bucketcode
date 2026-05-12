@@ -1,102 +1,147 @@
-import Image, { type ImageProps } from "next/image";
-import { Button } from "@repo/ui/button";
-import styles from "./page.module.css";
+"use client";
 
-type Props = Omit<ImageProps, "src"> & {
-  srcLight: string;
-  srcDark: string;
-};
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
+import { createRepl } from "../lib/api";
 
-const ThemeImage = (props: Props) => {
-  const { srcLight, srcDark, ...rest } = props;
+const LANGUAGES = [
+  {
+    id: "node-js" as const,
+    name: "Node.js",
+    description: "JavaScript runtime",
+    icon: "⬡",
+    color: "#3fb950",
+  },
+  {
+    id: "python" as const,
+    name: "Python",
+    description: "General purpose",
+    icon: "🐍",
+    color: "#58a6ff",
+  },
+];
 
-  return (
-    <>
-      <Image {...rest} src={srcLight} className="imgLight" />
-      <Image {...rest} src={srcDark} className="imgDark" />
-    </>
+export default function HomePage() {
+  const router = useRouter();
+  const [selectedLang, setSelectedLang] = useState<"node-js" | "python">(
+    "node-js"
   );
-};
+  const [replName, setReplName] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
 
-export default function Home() {
+  const handleCreate = async () => {
+    if (isCreating) return;
+    setIsCreating(true);
+
+    try {
+      const result = await createRepl(
+        selectedLang,
+        replName.trim() || "Untitled Repl",
+        // Stubbed ownerId — replace with real auth when implemented
+        "user-stub"
+      );
+
+      toast.success("Workspace created! Redirecting...");
+      router.push(`/repl/${result.replId}`);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to create workspace";
+      toast.error(message);
+      setIsCreating(false);
+    }
+  };
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <ThemeImage
-          className={styles.logo}
-          srcLight="turborepo-dark.svg"
-          srcDark="turborepo-light.svg"
-          alt="Turborepo logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol>
-          <li>
-            Get started by editing <code>apps/web/app/page.tsx</code>
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <div className="landing-container">
+      {/* Background gradient */}
+      <div className="landing-bg" aria-hidden="true" />
 
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new/clone?demo-description=Learn+to+implement+a+monorepo+with+a+two+Next.js+sites+that+has+installed+three+local+packages.&demo-image=%2F%2Fimages.ctfassets.net%2Fe5382hct74si%2F4K8ZISWAzJ8X1504ca0zmC%2F0b21a1c6246add355e55816278ef54bc%2FBasic.png&demo-title=Monorepo+with+Turborepo&demo-url=https%3A%2F%2Fexamples-basic-web.vercel.sh%2F&from=templates&project-name=Monorepo+with+Turborepo&repository-name=monorepo-turborepo&repository-url=https%3A%2F%2Fgithub.com%2Fvercel%2Fturborepo%2Ftree%2Fmain%2Fexamples%2Fbasic&root-directory=apps%2Fdocs&skippable-integrations=1&teamSlug=vercel&utm_source=create-turbo"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+      <div className="landing-content">
+        {/* Hero */}
+        <header className="landing-hero">
+          <h1>BucketCode</h1>
+          <p>
+            Code, run, and preview projects instantly in your browser.
+            <br />
+            No setup required.
+          </p>
+        </header>
+
+        {/* Create Form */}
+        <div className="card-glass landing-form">
+          {/* Language Picker */}
+          <div className="form-group">
+            <label className="form-label" id="lang-label">
+              Choose a language
+            </label>
+            <div
+              className="language-grid"
+              role="radiogroup"
+              aria-labelledby="lang-label"
+            >
+              {LANGUAGES.map((lang) => (
+                <button
+                  key={lang.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selectedLang === lang.id}
+                  className={`language-card ${selectedLang === lang.id ? "selected" : ""}`}
+                  onClick={() => setSelectedLang(lang.id)}
+                >
+                  <span
+                    className="language-icon"
+                    style={{ color: lang.color }}
+                    aria-hidden="true"
+                  >
+                    {lang.icon}
+                  </span>
+                  <span className="language-name">{lang.name}</span>
+                  <span className="language-desc">{lang.description}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Name Input */}
+          <div className="form-group">
+            <label className="form-label" htmlFor="repl-name-input">
+              Project name
+            </label>
+            <input
+              id="repl-name-input"
+              className="input"
+              type="text"
+              placeholder="my-awesome-project"
+              value={replName}
+              onChange={(e) => setReplName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreate();
+              }}
+              maxLength={64}
+              autoComplete="off"
             />
-            Deploy now
-          </a>
-          <a
-            href="https://turborepo.dev/docs?utm_source"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.secondary}
+          </div>
+
+          {/* Create Button */}
+          <button
+            id="create-repl-button"
+            className="btn btn-primary btn-lg"
+            onClick={handleCreate}
+            disabled={isCreating}
+            style={{ width: "100%" }}
           >
-            Read our docs
-          </a>
+            {isCreating ? (
+              <>
+                <span className="loader-spinner" aria-hidden="true" />
+                Creating workspace...
+              </>
+            ) : (
+              "Create Workspace →"
+            )}
+          </button>
         </div>
-        <Button appName="web" className={styles.secondary}>
-          Open alert
-        </Button>
-      </main>
-      <footer className={styles.footer}>
-        <a
-          href="https://vercel.com/templates?search=turborepo&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          href="https://turborepo.dev?utm_source=create-turbo"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to turborepo.dev →
-        </a>
-      </footer>
+      </div>
     </div>
   );
 }
