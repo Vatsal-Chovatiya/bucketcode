@@ -83,6 +83,16 @@ replRouter.post('/', zValidator('json', replSchema), async (c) => {
 
   // DB Insert
   try {
+    await client.user.upsert({
+      where: { id: ownerId },
+      create: {
+        id: ownerId,
+        email: `${ownerId}@dev.local`,
+        username: ownerId,
+      },
+      update: {},
+    });
+
     await client.repl.create({
       data: {
         id: replId,
@@ -95,7 +105,7 @@ replRouter.post('/', zValidator('json', replSchema), async (c) => {
     });
   } catch (err) {
     console.error('Error inserting Repl to DB:', err);
-    // If it fails, S3 is seeded but no DB entry. 
+    // If it fails, S3 is seeded but no DB entry.
     // We could clean up S3 here, but since this is an ephemeral repl, it might be fine to leave it.
     return c.json({ error: 'Failed to insert into database' }, 500);
   }

@@ -1,0 +1,195 @@
+# =============================================================================
+# BucketCode — CI/CD Pipeline
+# =============================================================================
+# Triggered on push/PR to main. Four jobs:
+#   1. lint-typecheck-test  — Code quality gates
+#   2. build-push-images    — Build & push Docker images to GHCR
+#   3. sync-templates       — Sync S3 repl templates
+#   4. deploy-k8s           — Rolling update K8s deployments (main only)
+#
+# Required GitHub Secrets:
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, S3_BUCKET
+#   KUBE_CONFIG (base64-encoded), DATABASE_URL, JWT_SECRET
+# =============================================================================
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+# ---------------------------------------------------------------------------
+# Job 1: Lint, Typecheck, Test
+# ---------------------------------------------------------------------------
+jobs:
+  lint-typecheck-test:
+    name: "🔍 Lint + Typecheck + Test"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Run tests
+        run: bun run test
+        env:
+          NODE_ENV: test
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Build & Push Docker Images
+  # ---------------------------------------------------------------------------
+  build-push-images:
+    name: "🐳 Build ${{ matrix.app }}"
+    needs: lint-typecheck-test
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - runner-node
+          - runner-react
+          - ws-backend
+          - http-api
+          - orchestrator
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: infra/docker/${{ matrix.app }}.Dockerfile
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.app }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.app }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Sync S3 Templates
+  # ---------------------------------------------------------------------------
+  sync-templates:
+    name: "📦 Sync S3 Templates"
+    needs: lint-typecheck-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Sync templates to S3
+        run: |
+          echo "Syncing infra/templates/ to s3://${{ secrets.S3_BUCKET }}/templates/..."
+          aws s3 sync infra/templates/ s3://${{ secrets.S3_BUCKET }}/templates/ \
+            --delete \
+            --no-progress
+          echo "✅ Template sync complete"
+
+  # ---------------------------------------------------------------------------
+  # Job 4: Deploy to Kubernetes
+  # ---------------------------------------------------------------------------
+  deploy-k8s:
+    name: "🚀 Deploy to K8s"
+    needs: [build-push-images, sync-templates]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: latest
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Deploy services
+        run: |
+          TAG="${{ github.sha }}"
+          REGISTRY="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}"
+
+          echo "🔄 Updating deployment images to tag: ${TAG}"
+
+          # Update each deployment's container image
+          kubectl set image deployment/http-api \
+            http-api=${REGISTRY}/http-api:${TAG}
+
+          kubectl set image deployment/orchestrator \
+            orchestrator=${REGISTRY}/orchestrator:${TAG}
+
+          kubectl set image deployment/ws-backend \
+            ws-backend=${REGISTRY}/ws-backend:${TAG}
+
+          echo "⏳ Waiting for rollouts to complete..."
+
+          kubectl rollout status deployment/http-api --timeout=300s
+          kubectl rollout status deployment/orchestrator --timeout=300s
+          kubectl rollout status deployment/ws-backend --timeout=300s
+
+          echo "✅ All deployments updated successfully"
+
+      - name: Verify deployment health
+        run: |
+          echo "🔍 Checking pod status..."
+          kubectl get pods -l app=http-api
+          kubectl get pods -l app=orchestrator
+          kubectl get pods -l app=ws-backend
+          echo "✅ Deployment verification complete"

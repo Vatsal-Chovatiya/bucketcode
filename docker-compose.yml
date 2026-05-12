@@ -1,0 +1,39 @@
+# =============================================================================
+# BucketCode — Local Development Compose
+# =============================================================================
+# Only MinIO runs locally via Docker Compose.
+#   - Neon Postgres is external (serverless, no local container needed).
+#   - K8s workloads run via Docker Desktop Kubernetes.
+#
+# Usage:
+#   docker compose up -d        # Start MinIO
+#   docker compose down         # Stop MinIO
+#   docker compose down -v      # Stop MinIO + delete data volume
+# =============================================================================
+
+version: "3.8"
+
+services:
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: bucketcode-minio
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # MinIO Console (web UI)
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  minio-data:
+    driver: local

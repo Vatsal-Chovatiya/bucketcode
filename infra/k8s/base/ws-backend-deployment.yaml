@@ -1,0 +1,91 @@
+# =============================================================================
+# BucketCode — WebSocket Backend (Relay) Deployment & Service
+# =============================================================================
+# The WS relay handles browser-to-runner WebSocket proxying.
+# It authenticates connections via JWT, enforces rate limits, and tracks
+# active connections for idle pod detection.
+#
+# For local development with Docker Desktop K8s:
+#   kubectl apply -f infra/k8s/base/ws-backend-deployment.yaml
+# =============================================================================
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ws-backend
+  labels:
+    app: ws-backend
+    app.kubernetes.io/part-of: bucketcode
+    app.kubernetes.io/component: relay
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ws-backend
+  template:
+    metadata:
+      labels:
+        app: ws-backend
+    spec:
+      containers:
+        - name: ws-backend
+          image: bucketcode/ws-backend:v1
+          imagePullPolicy: Never  # Use local Docker images (Docker Desktop K8s)
+          ports:
+            - containerPort: 3003
+              name: ws
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "3003"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: database-url
+                  optional: true
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: jwt-secret
+                  optional: true
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: ws
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: ws
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ws-backend
+  labels:
+    app: ws-backend
+spec:
+  type: ClusterIP
+  selector:
+    app: ws-backend
+  ports:
+    - name: ws
+      port: 8081        # External-facing port (mapped from container 3003)
+      targetPort: 3003
+      protocol: TCP

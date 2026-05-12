@@ -2,11 +2,11 @@
   "name": "bucketcode",
   "private": true,
   "scripts": {
+    "dev:full": "bash scripts/setup-local.sh && turbo run dev --filter=!@repo/runner",
     "build": "turbo run build",
-    "dev": "turbo run dev",
     "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "check-types": "turbo run check-types"
+    "typecheck": "turbo run typecheck",
+    "test": "bun test"
   },
   "devDependencies": {
     "prettier": "^3.7.4",

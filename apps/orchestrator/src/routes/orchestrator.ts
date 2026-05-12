@@ -73,9 +73,13 @@ orchestratorRouter.post('/start', zValidator('json', startSchema), async (c) => 
     );
   }
 
-  // Step 3: Prepare template variables
+  // Step 3: Prepare template variables.
+  // Map the validated language to the image suffix used in built tags:
+  //   "node-js" → "node"   (image: bucketcode/runner-node:v1)
+  //   "python"  → "python" (no image yet)
+  const imageLang = language === 'node-js' ? 'node' : language;
   const s3Path = `${s3Paths.getUserCodePath(replId)}`;
-  const templateVars = { replId, language, s3Path };
+  const templateVars = { replId, language: imageLang, s3Path };
 
   try {
     // Step 4: Render templates and apply to k8s

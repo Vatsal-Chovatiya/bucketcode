@@ -1,0 +1,12 @@
+# =============================================================================
+# BucketCode — Namespace
+# =============================================================================
+# Ensures the default namespace exists. In production, change this to a
+# dedicated namespace like 'bucketcode' for resource isolation.
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: default
+  labels:
+    app.kubernetes.io/part-of: bucketcode

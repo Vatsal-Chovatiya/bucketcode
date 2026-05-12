@@ -13,7 +13,7 @@ const __dirname = path.dirname(__filename);
  */
 export const config = {
   /** Port the orchestrator HTTP server listens on */
-  port: parseInt(process.env.ORCHESTRATOR_PORT || '3003', 10),
+  port: parseInt(process.env.ORCHESTRATOR_PORT || '3002', 10),
 
   /** Kubernetes namespace to deploy runner pods into */
   namespace: process.env.K8S_NAMESPACE || 'default',
@@ -22,7 +22,7 @@ export const config = {
    * Absolute path to infra/k8s/ directory containing YAML templates.
    * Resolved relative to the project root (2 levels up from src/).
    */
-  templatesDir: process.env.TEMPLATES_DIR || path.resolve(__dirname, '..', '..', '..', '..', 'infra', 'k8s'),
+  templatesDir: process.env.TEMPLATES_DIR || path.resolve(__dirname, '..', '..', '..', 'infra', 'k8s'),
 
   /**
    * How often the pod-phase watcher polls Kubernetes for status changes.
