@@ -62,23 +62,25 @@ FROM node:20-slim AS runtime
 
 WORKDIR /app
 
-# Install runtime dependency for node-pty
+# Install runtime dependency for node-pty and install bun
 RUN apt-get update && apt-get install -y \
     python3 \
     make \
     g++ \
     build-essential \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    unzip \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL https://bun.sh/install | bash \
+    && ln -s /root/.bun/bin/bun /usr/local/bin/bun
 
-# Copy built application from builder
-COPY --from=builder /app /app
+# Copy built application from builder (with chown to avoid slow recursive chown layer)
+COPY --chown=node:node --from=builder /app /app
 
 # Create workspace directory for user code (mounted as emptyDir in K8s)
 RUN mkdir -p /workspace && chown -R node:node /workspace
 
 # Non-root user for security
-RUN chown -R node:node /app
 USER node
 
 # Ports:
@@ -90,5 +92,10 @@ EXPOSE 3001 3000
 HEALTHCHECK --interval=15s --timeout=5s --retries=3 \
     CMD curl -sf http://localhost:3001/health || exit 1
 
+ENV NODE_ENV=production
+
+# Change to the runner directory so dist/index.js resolves correctly
+WORKDIR /app/apps/runner
+
 # Run the guard script which manages the runner process
-ENTRYPOINT ["node", "apps/runner/guard.js"]
+ENTRYPOINT ["node", "guard.js"]

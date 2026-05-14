@@ -86,7 +86,7 @@ export interface ReplMetadata {
  * Seeds S3 from template and inserts DB record.
  */
 export async function createRepl(
-  language: "node-js" | "python",
+  language: "node-js" | "react",
   name: string,
   ownerId: string,
   signal?: AbortSignal
@@ -146,7 +146,7 @@ export interface WorkspaceStatusResponse {
  */
 export async function startWorkspace(
   replId: string,
-  language: "node-js" | "python",
+  language: "node-js" | "react",
   tier: "free" | "pro" = "free",
   signal?: AbortSignal
 ): Promise<StartWorkspaceResponse> {

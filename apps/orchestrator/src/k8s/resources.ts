@@ -177,7 +177,8 @@ export async function deleteIngress(
 // ---------------------------------------------------------------------------
 
 /**
- * Gets the current phase of a pod.
+ * Gets the current phase of a pod, with extra heuristics for stuck-Pending
+ * situations that Kubernetes reports as Pending but will never recover:
  *
  * Pod phases in Kubernetes:
  * - Pending     → Scheduled but containers not yet running
@@ -185,6 +186,11 @@ export async function deleteIngress(
  * - Succeeded   → All containers terminated successfully
  * - Failed      → All containers terminated, at least one failed
  * - Unknown     → State cannot be determined
+ *
+ * Extra 'Failed' cases detected (pod stays Pending forever):
+ * - ErrImageNeverPull  → imagePullPolicy:Never but image not present
+ * - ImagePullBackOff   → remote pull failed (retrying with backoff)
+ * - InvalidImageName   → image name malformed
  *
  * @returns The phase string, or 'NotFound' if the pod doesn't exist
  */
@@ -197,7 +203,38 @@ export async function getPodPhase(
       namespace,
       name,
     });
-    return pod.status?.phase || 'Unknown';
+
+    const phase = pod.status?.phase || 'Unknown';
+
+    // Kubernetes leaves pods in Pending phase when a container can't pull its
+    // image. The pod will never self-heal — detect these early so the watcher
+    // can tear down resources and mark the repl TERMINATED promptly.
+    if (phase === 'Pending') {
+      const FATAL_REASONS = new Set([
+        'ErrImageNeverPull',
+        'ImagePullBackOff',
+        'ErrImagePull',
+        'InvalidImageName',
+      ]);
+
+      const allContainerStatuses = [
+        ...(pod.status?.initContainerStatuses ?? []),
+        ...(pod.status?.containerStatuses ?? []),
+      ];
+
+      for (const cs of allContainerStatuses) {
+        const reason = cs.state?.waiting?.reason ?? '';
+        if (FATAL_REASONS.has(reason)) {
+          console.warn(
+            `[k8s] Pod ${name} stuck in Pending due to ${reason} ` +
+            `(container: ${cs.name}) — treating as Failed`
+          );
+          return 'Failed';
+        }
+      }
+    }
+
+    return phase;
   } catch (err) {
     if (isNotFound(err)) {
       return 'NotFound';

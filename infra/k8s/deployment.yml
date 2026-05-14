@@ -1,0 +1,299 @@
+# =============================================================================
+# BucketCode — Unified Deployment Manifest
+# =============================================================================
+# This file consolidates the core services of the BucketCode platform:
+#   1. Namespace (default)
+#   2. HTTP API (http-api)
+#   3. WebSocket Backend (ws-backend)
+#   4. Orchestrator (orchestrator)
+#
+# Usage:
+#   kubectl apply -f infra/k8s/deployment.yml
+# =============================================================================
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: default
+  labels:
+    app.kubernetes.io/part-of: bucketcode
+
+# -----------------------------------------------------------------------------
+# HTTP API
+# -----------------------------------------------------------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: http-api
+  namespace: default
+  labels:
+    app: http-api
+    app.kubernetes.io/part-of: bucketcode
+    app.kubernetes.io/component: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: http-api
+  template:
+    metadata:
+      labels:
+        app: http-api
+    spec:
+      containers:
+        - name: http-api
+          image: bucketcode/http-api:v1
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 3001
+              name: http
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "3001"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: database-url
+                  optional: true
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: jwt-secret
+                  optional: true
+            - name: S3_ENDPOINT
+              value: "http://host.docker.internal:9000"
+            - name: S3_BUCKET
+              value: "bucketcode-repls"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: s3-creds
+                  key: access-key
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: s3-creds
+                  key: secret-key
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: http-api
+  namespace: default
+  labels:
+    app: http-api
+spec:
+  type: ClusterIP
+  selector:
+    app: http-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 3001
+      protocol: TCP
+
+# -----------------------------------------------------------------------------
+# WebSocket Backend (WS Relay)
+# -----------------------------------------------------------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ws-backend
+  namespace: default
+  labels:
+    app: ws-backend
+    app.kubernetes.io/part-of: bucketcode
+    app.kubernetes.io/component: relay
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ws-backend
+  template:
+    metadata:
+      labels:
+        app: ws-backend
+    spec:
+      containers:
+        - name: ws-backend
+          image: bucketcode/ws-backend:v1
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 3003
+              name: ws
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "3003"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: database-url
+                  optional: true
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: jwt-secret
+                  optional: true
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: ws
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: ws
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ws-backend
+  namespace: default
+  labels:
+    app: ws-backend
+spec:
+  type: ClusterIP
+  selector:
+    app: ws-backend
+  ports:
+    - name: ws
+      port: 8081
+      targetPort: 3003
+      protocol: TCP
+
+# -----------------------------------------------------------------------------
+# Orchestrator
+# -----------------------------------------------------------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrator
+  namespace: default
+  labels:
+    app: orchestrator
+    app.kubernetes.io/part-of: bucketcode
+    app.kubernetes.io/component: orchestrator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orchestrator
+  template:
+    metadata:
+      labels:
+        app: orchestrator
+    spec:
+      serviceAccountName: default
+      containers:
+        - name: orchestrator
+          image: bucketcode/orchestrator:v1
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 3003
+              name: http
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: ORCHESTRATOR_PORT
+              value: "3003"
+            - name: K8S_NAMESPACE
+              value: "default"
+            - name: TEMPLATES_DIR
+              value: "/app/infra/k8s"
+            - name: PREVIEW_DOMAIN
+              value: "localtest.me"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: database-url
+                  optional: true
+            - name: WATCHER_INTERVAL_MS
+              value: "5000"
+            - name: CLEANUP_INTERVAL_MS
+              value: "60000"
+            - name: IDLE_TIMEOUT_MS
+              value: "300000"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestrator
+  namespace: default
+  labels:
+    app: orchestrator
+spec:
+  type: ClusterIP
+  selector:
+    app: orchestrator
+  ports:
+    - name: http
+      port: 8082
+      targetPort: 3003
+      protocol: TCP

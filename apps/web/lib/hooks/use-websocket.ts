@@ -136,6 +136,13 @@ export function useWebSocket(replId: string) {
       token,
       onMessage: handleMessage,
       onStatusChange: handleStatusChange,
+      onPermanentDisconnect: () => {
+        // Reconnect attempts exhausted or repl is terminated.
+        // Flip the workspace to TERMINATED so the IdleOverlay is shown
+        // and the user can restart their workspace.
+        console.warn("[useWebSocket] Permanent disconnect — showing idle overlay");
+        actions.setStatus("TERMINATED");
+      },
     });
 
     clientRef.current = client;
@@ -149,6 +156,7 @@ export function useWebSocket(replId: string) {
       }
     };
   }, [replId, handleMessage, handleStatusChange, actions]);
+
 
   // ── Send Function ──────────────────────────────
 

@@ -14,17 +14,17 @@ const LANGUAGES = [
     color: "#3fb950",
   },
   {
-    id: "python" as const,
-    name: "Python",
-    description: "General purpose",
-    icon: "🐍",
+    id: "react" as const,
+    name: "React",
+    description: "UI component library",
+    icon: "⚛",
     color: "#58a6ff",
   },
 ];
 
 export default function HomePage() {
   const router = useRouter();
-  const [selectedLang, setSelectedLang] = useState<"node-js" | "python">(
+  const [selectedLang, setSelectedLang] = useState<"node-js" | "react">(
     "node-js"
   );
   const [replName, setReplName] = useState("");

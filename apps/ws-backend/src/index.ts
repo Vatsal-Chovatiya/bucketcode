@@ -23,7 +23,7 @@ server.on('upgrade', async (request, socket, head) => {
   try {
     // 1. Authenticate & validate
     const authResult = await authenticateUpgrade(request.url);
-    const { userId, replId, podName } = authResult;
+    const { userId, replId, runnerAddr } = authResult;
 
     // 2. Rate limiting (Upgrade Limit)
     if (!rateLimiter.checkUpgradeAllowed(userId)) {
@@ -46,10 +46,8 @@ server.on('upgrade', async (request, socket, head) => {
       rateLimiter.incrementConcurrent(userId);
       await connectionTracker.addConnection(replId, ws);
 
-      // Local dev usually uses svc-${replId}:3001, production uses K8s DNS
-      const runnerAddr = `ws://svc-${replId}:3001`;
-
-      // 5. Start Proxy
+      // Use the runner address fetched from DB during auth
+      // This ensures we use the real k8s service DNS stored by the orchestrator
       startProxy(ws, runnerAddr, replId);
 
       // Cleanup on close
@@ -60,7 +58,13 @@ server.on('upgrade', async (request, socket, head) => {
 
   } catch (err: any) {
     if (err instanceof AuthError) {
-      socket.write(`HTTP/1.1 ${err.statusCode} ${err.message}\r\n\r\n`);
+      if (err.statusCode === 410) {
+        // Repl is terminated — send a proper WS upgrade rejection
+        // We can't send WS close frames before the upgrade, so reject at HTTP level
+        socket.write(`HTTP/1.1 410 Gone\r\n\r\n`);
+      } else {
+        socket.write(`HTTP/1.1 ${err.statusCode} ${err.message}\r\n\r\n`);
+      }
     } else if (err instanceof RetryableError) {
       socket.write(`HTTP/1.1 ${err.statusCode} ${err.message}\r\nRetry-After: ${err.retryAfter}\r\n\r\n`);
     } else {

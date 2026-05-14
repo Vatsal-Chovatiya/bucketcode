@@ -7,9 +7,24 @@ metadata:
     replId: "{replId}"
 spec:
   restartPolicy: Never
+
+  # ---------------------------------------------------------------------------
+  # hostAliases: Ensure host.docker.internal resolves inside the pod.
+  # - Docker Desktop: injects this automatically (this entry is a no-op).
+  # - Colima k3s:     host gateway is always 192.168.5.2 (QEMU/vz VLAN).
+  # ---------------------------------------------------------------------------
+  hostAliases:
+    - ip: "192.168.5.2"
+      hostnames:
+        - "host.docker.internal"
+
   initContainers:
     - name: s3-sync
       image: amazon/aws-cli:latest
+      # IfNotPresent prevents k8s from pulling :latest on every pod start.
+      # The image is pre-loaded into the containerd k8s.io namespace by
+      # scripts/setup-local.sh during local dev setup.
+      imagePullPolicy: IfNotPresent
       command:
         - "sh"
         - "-c"
@@ -30,6 +45,7 @@ spec:
       volumeMounts:
         - name: workspace
           mountPath: /workspace
+
   containers:
     - name: runner
       image: bucketcode/runner-{language}:v1
@@ -54,6 +70,7 @@ spec:
       volumeMounts:
         - name: workspace
           mountPath: /workspace
+
   volumes:
     - name: workspace
       emptyDir: {}

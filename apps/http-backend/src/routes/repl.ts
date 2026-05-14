@@ -9,7 +9,7 @@ import cuid from 'cuid';
 export const replRouter = new Hono();
 
 const replSchema = z.object({
-  language: z.enum(['node-js', 'python']),
+  language: z.enum(['node-js', 'react']),
   name: z.string().optional().default('Untitled Repl'),
   ownerId: z.string(),
 });
@@ -97,7 +97,7 @@ replRouter.post('/', zValidator('json', replSchema), async (c) => {
       data: {
         id: replId,
         name,
-        language: language === 'node-js' ? 'NODE_JS' : 'PYTHON',
+        language: language === 'node-js' ? 'NODE_JS' : 'REACT',
         s3Path,
         ownerId,
         status: 'STARTING'

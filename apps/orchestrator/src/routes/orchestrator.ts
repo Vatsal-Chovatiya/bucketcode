@@ -21,9 +21,14 @@ export const orchestratorRouter = new Hono();
 // Validation Schemas
 // ---------------------------------------------------------------------------
 
+// Languages that have a built runner image available locally.
+// Add new entries here as runner images are built and loaded into the cluster.
+const SUPPORTED_LANGUAGES = ['node-js', 'react'] as const;
+type SupportedLanguage = typeof SUPPORTED_LANGUAGES[number];
+
 const startSchema = z.object({
   replId: z.string().min(1, 'replId is required'),
-  language: z.enum(['node-js', 'python']),
+  language: z.enum(SUPPORTED_LANGUAGES),
   tier: z.enum(['free', 'pro']).default('free'),
 });
 
@@ -74,11 +79,16 @@ orchestratorRouter.post('/start', zValidator('json', startSchema), async (c) => 
   }
 
   // Step 3: Prepare template variables.
-  // Map the validated language to the image suffix used in built tags:
+  // Map the validated language to the Docker image tag suffix:
   //   "node-js" → "node"   (image: bucketcode/runner-node:v1)
-  //   "python"  → "python" (no image yet)
-  const imageLang = language === 'node-js' ? 'node' : language;
-  const s3Path = `${s3Paths.getUserCodePath(replId)}`;
+  //   "react"   → "react"  (image: bucketcode/runner-react:v1)
+  const imageLangMap: Record<SupportedLanguage, string> = {
+    'node-js': 'node',
+    'react': 'react',
+  };
+  const imageLang = imageLangMap[language];
+  const s3Bucket = process.env.S3_BUCKET || 'bucketcode-repls';
+  const s3Path = `${s3Bucket}/${s3Paths.getUserCodePath(replId)}`;
   const templateVars = { replId, language: imageLang, s3Path };
 
   try {

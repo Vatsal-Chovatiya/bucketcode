@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { config } from './config.js';
+import { startKubectlProxy, stopKubectlProxy } from './k8s/client.js';
 import { loadTemplates } from './k8s/templates.js';
 import { startBackgroundWorkers, stopBackgroundWorkers } from './k8s/watcher.js';
 import { orchestratorRouter } from './routes/orchestrator.js';
@@ -22,59 +23,66 @@ import { orchestratorRouter } from './routes/orchestrator.js';
 //   - Idle Cleanup Ticker: RUNNING → TERMINATED after inactivity
 // ---------------------------------------------------------------------------
 
-// --- Startup Checks ---
+// --- Async Startup ---
+// Wrapped in main() because kubectl proxy startup is async.
 
-// Load YAML templates from infra/k8s/ into memory (fail-fast if missing)
-try {
-  loadTemplates();
-  console.log('[startup] K8s templates loaded successfully');
-} catch (err) {
-  console.error('[startup] Failed to load templates:', err);
-  process.exit(1);
-}
+async function main() {
+  // Start kubectl proxy for local dev (handles TLS + cert auth)
+  await startKubectlProxy();
 
-// --- HTTP Server ---
+  // Load YAML templates from infra/k8s/ into memory (fail-fast if missing)
+  try {
+    loadTemplates();
+    console.log('[startup] K8s templates loaded successfully');
+  } catch (err) {
+    console.error('[startup] Failed to load templates:', err);
+    process.exit(1);
+  }
 
-const app = new Hono();
+  // --- HTTP Server ---
 
-// Middleware
-app.use('*', cors());
-app.use('*', logger());
+  const app = new Hono();
 
-// Mount routes
-app.route('/', orchestratorRouter);
+  // Middleware
+  app.use('*', cors());
+  app.use('*', logger());
 
-// Health check
-app.get('/health', (c) => {
-  return c.json({
-    status: 'ok',
-    service: 'orchestrator',
-    namespace: config.namespace,
-    uptime: process.uptime(),
+  // Mount routes
+  app.route('/', orchestratorRouter);
+
+  // Health check
+  app.get('/health', (c) => {
+    return c.json({
+      status: 'ok',
+      service: 'orchestrator',
+      namespace: config.namespace,
+      uptime: process.uptime(),
+    });
   });
-});
 
-// --- Start Server ---
+  // --- Start Server ---
 
-console.log(`Starting orchestrator server on port ${config.port}...`);
+  console.log(`Starting orchestrator server on port ${config.port}...`);
 
-serve({
-  fetch: app.fetch,
-  port: config.port,
-});
+  serve({
+    fetch: app.fetch,
+    port: config.port,
+  });
 
-// Start background workers after HTTP server is listening
-startBackgroundWorkers();
+  // Start background workers after HTTP server is listening
+  startBackgroundWorkers();
 
-console.log(`[startup] Orchestrator ready on http://localhost:${config.port}`);
-console.log(`[startup] Namespace: ${config.namespace}`);
-console.log(`[startup] Templates dir: ${config.templatesDir}`);
+  console.log(`[startup] Orchestrator ready on http://localhost:${config.port}`);
+  console.log(`[startup] Namespace: ${config.namespace}`);
+  console.log(`[startup] Templates dir: ${config.templatesDir}`);
+}
 
 // --- Graceful Shutdown ---
 
 function shutdown(signal: string) {
   console.log(`\n[shutdown] Received ${signal}, shutting down...`);
   stopBackgroundWorkers();
+  stopKubectlProxy();
   // Give in-flight requests a moment to complete
   setTimeout(() => {
     console.log('[shutdown] Goodbye.');
@@ -84,3 +92,9 @@ function shutdown(signal: string) {
 
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+// --- Run ---
+main().catch((err) => {
+  console.error('[startup] Fatal error:', err);
+  process.exit(1);
+});

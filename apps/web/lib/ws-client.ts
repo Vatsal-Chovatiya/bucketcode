@@ -27,6 +27,8 @@ export interface WsClientOptions {
   token: string;
   onMessage: ServerMessageHandler;
   onStatusChange: (status: WsClientStatus) => void;
+  /** Called when reconnect attempts are exhausted. */
+  onPermanentDisconnect?: () => void;
 }
 
 interface QueuedMessage {
@@ -40,7 +42,7 @@ const PING_INTERVAL_MS = 30_000;
 const RECONNECT_BASE_MS = 1_000;
 const RECONNECT_MAX_MS = 30_000;
 const QUEUE_MAX_AGE_MS = 60_000; // drop queued messages older than 1 min
-const POD_BOOTING_RETRY_MS = 2_000;
+const MAX_RECONNECT_ATTEMPTS = 10; // give up after ~5.5min total
 
 // ─── Auth Helper (Stubbed) ───────────────────────────────────────
 
@@ -173,13 +175,28 @@ export class WsClient {
     if (this.disposed) return;
 
     // Handle specific close codes
-    if (event.code === 4001 || event.code === 1008) {
-      // Auth failure — don't reconnect
+    if (
+      event.code === 4001 || // Auth failure
+      event.code === 1008 || // Policy violation
+      event.code === 4010    // Repl terminated (410 Gone from server)
+    ) {
+      // Fatal — don't reconnect
+      console.warn(`[WsClient] Permanent disconnect (code: ${event.code})`); 
       this.options.onStatusChange("disconnected");
+      this.options.onPermanentDisconnect?.();
       return;
     }
 
     this.options.onStatusChange("disconnected");
+
+    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      console.warn(
+        `[WsClient] Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached. Giving up.`
+      );
+      this.options.onPermanentDisconnect?.();
+      return;
+    }
+
     this.scheduleReconnect();
   };
 

@@ -7,6 +7,7 @@ export interface AuthResult {
   userId: string;
   replId: string;
   podName: string;
+  runnerAddr: string;
 }
 
 export class AuthError extends Error {
@@ -54,7 +55,7 @@ export async function authenticateUpgrade(url: string | undefined): Promise<Auth
   // Check ownership and status in DB
   const repl = await client.repl.findUnique({
     where: { id: replId },
-    select: { ownerId: true, status: true, podName: true }
+    select: { ownerId: true, status: true, podName: true, runnerAddr: true },
   });
 
   if (!repl) {
@@ -74,9 +75,15 @@ export async function authenticateUpgrade(url: string | undefined): Promise<Auth
     throw new RetryableError(503, 'Pod is starting', 2);
   }
 
+  if (!repl.runnerAddr) {
+    // Pod exists but orchestrator hasn't written runnerAddr yet — retry shortly
+    throw new RetryableError(503, 'Runner address not yet available', 2);
+  }
+
   return {
     userId,
     replId,
-    podName: repl.podName
+    podName: repl.podName,
+    runnerAddr: repl.runnerAddr,
   };
 }

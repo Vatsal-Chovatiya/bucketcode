@@ -8,9 +8,9 @@ let runnerProcess = null;
 function startRunner() {
   console.log(`[Guard] Starting runner process (Attempt ${restartCount + 1}/${MAX_RESTARTS + 1})`);
   
-  // Start the runner using node or bun depending on the environment
-  const cmd = process.env.NODE_ENV === 'production' ? 'node' : 'bun';
-  const args = process.env.NODE_ENV === 'production' ? ['dist/index.js'] : ['run', 'src/index.ts'];
+  // Start the runner using bun to resolve workspace and typescript dependencies natively
+  const cmd = 'bun';
+  const args = ['run', 'src/index.ts'];
 
   runnerProcess = spawn(cmd, args, {
     stdio: 'inherit',

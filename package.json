@@ -3,6 +3,9 @@
   "private": true,
   "scripts": {
     "dev:full": "bash scripts/setup-local.sh && turbo run dev --filter=!@repo/runner",
+    "dev:light": "bash scripts/setup-local.sh --light && turbo run dev --filter=!@repo/runner",
+    "dev:infra": "bash scripts/setup-local.sh --light",
+    "docker:clean": "bash scripts/setup-local.sh --cleanup",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",

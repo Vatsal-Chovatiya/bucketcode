@@ -79,8 +79,8 @@ export function IdleOverlay({ replId, language }: IdleOverlayProps) {
   const handleResume = useCallback(async () => {
     try {
       actions.setStatus("BOOTING");
-      const lang = language === "NODE_JS" ? "node-js" : "python";
-      await startWorkspace(replId, lang as "node-js" | "python");
+      const lang = language === "NODE_JS" ? "node-js" : "react";
+      await startWorkspace(replId, lang as "node-js" | "react");
       toast.success("Workspace resuming...");
     } catch (err) {
       const msg =
