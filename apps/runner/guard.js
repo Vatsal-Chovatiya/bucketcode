@@ -7,10 +7,12 @@ let runnerProcess = null;
 
 function startRunner() {
   console.log(`[Guard] Starting runner process (Attempt ${restartCount + 1}/${MAX_RESTARTS + 1})`);
-  
-  // Start the runner using bun to resolve workspace and typescript dependencies natively
-  const cmd = 'bun';
-  const args = ['run', 'src/index.ts'];
+
+  // Run under Node (not Bun) so node-pty's native PTY allocation works.
+  // Bun's child-process handling sends SIGHUP to the spawned PTY shell
+  // immediately, breaking the in-browser terminal.
+  const cmd = 'node';
+  const args = ['dist/bundle.mjs'];
 
   runnerProcess = spawn(cmd, args, {
     stdio: 'inherit',

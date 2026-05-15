@@ -3,6 +3,14 @@ import { client } from '@repo/db';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-for-dev';
 
+// Local dev convenience: the web client uses this literal token when no real
+// auth is wired up (apps/web/lib/ws-client.ts:getAuthToken). Treating it as a
+// valid identity lets the IDE connect end-to-end without standing up a
+// signing service. Disabled when AUTH_DEV_STUB=0 or NODE_ENV=production.
+const DEV_STUB_TOKEN = 'dev-token-stub';
+const DEV_STUB_ENABLED =
+  process.env.NODE_ENV !== 'production' && process.env.AUTH_DEV_STUB !== '0';
+
 export interface AuthResult {
   userId: string;
   replId: string;
@@ -40,16 +48,21 @@ export async function authenticateUpgrade(url: string | undefined): Promise<Auth
     throw new AuthError(400, 'Missing replId parameter');
   }
 
-  let decodedToken: any;
-  try {
-    decodedToken = jwt.verify(token, JWT_SECRET);
-  } catch (err) {
-    throw new AuthError(401, 'Invalid or expired token');
-  }
+  const isDevStub = DEV_STUB_ENABLED && token === DEV_STUB_TOKEN;
 
-  const userId = decodedToken.userId;
-  if (!userId) {
-    throw new AuthError(401, 'Invalid token payload: missing userId');
+  let userId: string | undefined;
+  if (!isDevStub) {
+    let decodedToken: any;
+    try {
+      decodedToken = jwt.verify(token, JWT_SECRET);
+    } catch (err) {
+      throw new AuthError(401, 'Invalid or expired token');
+    }
+
+    userId = decodedToken.userId;
+    if (!userId) {
+      throw new AuthError(401, 'Invalid token payload: missing userId');
+    }
   }
 
   // Check ownership and status in DB
@@ -62,7 +75,9 @@ export async function authenticateUpgrade(url: string | undefined): Promise<Auth
     throw new AuthError(404, 'Repl not found');
   }
 
-  if (repl.ownerId !== userId) {
+  if (isDevStub) {
+    userId = repl.ownerId;
+  } else if (repl.ownerId !== userId) {
     throw new AuthError(403, 'Forbidden: You do not own this Repl');
   }
 
@@ -81,7 +96,7 @@ export async function authenticateUpgrade(url: string | undefined): Promise<Auth
   }
 
   return {
-    userId,
+    userId: userId!,
     replId,
     podName: repl.podName,
     runnerAddr: repl.runnerAddr,

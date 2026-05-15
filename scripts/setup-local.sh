@@ -131,6 +131,32 @@ docker exec bucketcode-minio mc mb --ignore-existing local/bucketcode-repls 2>/d
 success "S3 bucket 'bucketcode-repls' ready"
 
 # ---------------------------------------------------------------------------
+# Step 3b: Seed starter templates
+# ---------------------------------------------------------------------------
+# Without templates under s3://${S3_BUCKET}/templates/<lang>/ the http-backend
+# repl-create flow copies zero files and the pod boots an empty /workspace.
+# Script runs from apps/http-backend so it can resolve @aws-sdk/client-s3 from
+# that workspace's node_modules.
+if [ -d "scripts/seed/templates" ] && [ -f "apps/http-backend/scripts/seed-templates.mjs" ]; then
+  info "Seeding starter templates into MinIO..."
+  ENV_VARS=(
+    "S3_ENDPOINT=${S3_ENDPOINT:-http://localhost:9000}"
+    "S3_BUCKET=${S3_BUCKET:-bucketcode-repls}"
+    "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-minioadmin}"
+    "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-minioadmin}"
+  )
+  if command -v bun > /dev/null 2>&1; then
+    ( cd apps/http-backend && env "${ENV_VARS[@]}" bun run scripts/seed-templates.mjs ) \
+      || warn "Template seed failed — repls will have empty /workspace"
+  elif command -v node > /dev/null 2>&1; then
+    ( cd apps/http-backend && env "${ENV_VARS[@]}" node scripts/seed-templates.mjs ) \
+      || warn "Template seed failed — repls will have empty /workspace"
+  else
+    warn "Neither bun nor node found — skipping template seed"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # Step 4: Verify Kubernetes cluster
 # ---------------------------------------------------------------------------
 info "Verifying Kubernetes cluster..."

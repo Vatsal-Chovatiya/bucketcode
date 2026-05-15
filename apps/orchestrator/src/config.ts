@@ -48,6 +48,14 @@ export const config = {
   previewDomain: process.env.PREVIEW_DOMAIN || 'localtest.me',
 
   /**
+   * URL scheme for preview links. Local dev ingress has no TLS, so http;
+   * production should set PREVIEW_SCHEME=https.
+   */
+  previewScheme:
+    process.env.PREVIEW_SCHEME ||
+    (process.env.NODE_ENV === 'production' ? 'https' : 'http'),
+
+  /**
    * Whether to spawn `kubectl proxy` for local dev.
    *
    * Bun's `node-fetch` polyfill silently ignores the `agent` option, which

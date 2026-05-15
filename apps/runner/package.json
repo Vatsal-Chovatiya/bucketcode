@@ -5,8 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "bun run src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js"
+    "build": "bun build --target=node --external node-pty --outfile=dist/bundle.mjs src/index.ts",
+    "start": "node dist/bundle.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1045.0",

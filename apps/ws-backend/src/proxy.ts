@@ -9,12 +9,24 @@ export function startProxy(clientWs: WebSocket, initialRunnerAddr: string, replI
   let runnerWs: WebSocket | null = null;
   let isReconnecting = false;
   let isClientClosed = false;
+  // Buffer client messages that arrive before the upstream runner WS opens
+  // (e.g. the client's initial fetchDir sent immediately on open).
+  const pendingFromClient: Array<{ data: WebSocket.Data; isBinary: boolean }> = [];
+
+  const flushPending = () => {
+    if (!runnerWs || runnerWs.readyState !== WebSocket.OPEN) return;
+    while (pendingFromClient.length > 0) {
+      const { data, isBinary } = pendingFromClient.shift()!;
+      runnerWs.send(data, { binary: isBinary });
+    }
+  };
 
   const connectToRunner = (runnerAddr: string) => {
     runnerWs = new WebSocket(runnerAddr);
 
     runnerWs.on('open', () => {
       console.log(`[Proxy] Connected to runner for ${replId} at ${runnerAddr}`);
+      flushPending();
       if (isReconnecting) {
         // Send a custom app-level event to let the frontend know we're back
         clientWs.send(JSON.stringify({ type: 'system', event: 'podReady' }));
@@ -81,6 +93,9 @@ export function startProxy(clientWs: WebSocket, initialRunnerAddr: string, replI
         return;
       }
       runnerWs.send(data, { binary: isBinary });
+    } else {
+      // Upstream not ready (still CONNECTING) — queue and flush on open.
+      pendingFromClient.push({ data, isBinary });
     }
   });
 

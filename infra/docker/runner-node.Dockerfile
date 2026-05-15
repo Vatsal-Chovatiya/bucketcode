@@ -71,8 +71,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     unzip \
     && rm -rf /var/lib/apt/lists/* \
-    && curl -fsSL https://bun.sh/install | bash \
-    && ln -s /root/.bun/bin/bun /usr/local/bin/bun
+    && npm install -g bun
 
 # Copy built application from builder (with chown to avoid slow recursive chown layer)
 COPY --chown=node:node --from=builder /app /app

@@ -68,7 +68,8 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     git \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g bun
 
 # Pre-install global React/Vite tooling so repls start faster
 RUN npm install -g create-vite@latest vite@latest typescript@latest
@@ -92,5 +93,8 @@ EXPOSE 3001 3000
 HEALTHCHECK --interval=15s --timeout=5s --retries=3 \
     CMD curl -sf http://localhost:3001/health || exit 1
 
+# Change to the runner directory so src/index.ts resolves correctly
+WORKDIR /app/apps/runner
+
 # Run the guard script which manages the runner process
-ENTRYPOINT ["node", "apps/runner/guard.js"]
+ENTRYPOINT ["node", "guard.js"]

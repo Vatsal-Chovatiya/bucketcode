@@ -4,8 +4,22 @@ import { authenticateUpgrade, AuthError, RetryableError } from './auth.js';
 import { rateLimiter } from './rate-limiter.js';
 import { startProxy } from './proxy.js';
 import { connectionTracker } from './connection-tracker.js';
+import { acquireRunnerUrl, releaseRunnerUrl, shutdownAllForwards } from './port-forward.js';
 
 const PORT = process.env.PORT || 3003;
+
+// In dev the orchestrator stores runnerAddr as cluster DNS (ws://svc-<replId>:3001).
+// That DNS only resolves inside the cluster, so on the host we transparently
+// route through `kubectl port-forward` to a local 127.0.0.1 port.
+function needsPortForward(runnerAddr: string): boolean {
+  if (process.env.WS_BACKEND_NO_PORT_FORWARD === '1') return false;
+  try {
+    const u = new URL(runnerAddr);
+    return u.hostname.startsWith('svc-');
+  } catch {
+    return false;
+  }
+}
 
 const server = http.createServer((req, res) => {
   if (req.url === '/health') {
@@ -39,20 +53,39 @@ server.on('upgrade', async (request, socket, head) => {
       return;
     }
 
-    // 4. Accept Upgrade
-    wss.handleUpgrade(request, socket, head, async (ws) => {
+    // 4. Resolve runner URL — rewrite cluster DNS to a local port-forward in dev
+    let resolvedRunnerAddr = runnerAddr;
+    let usingPortForward = false;
+    if (needsPortForward(runnerAddr)) {
+      try {
+        resolvedRunnerAddr = await acquireRunnerUrl(replId);
+        usingPortForward = true;
+        console.log(`[Upgrade] Routing ${replId} via port-forward → ${resolvedRunnerAddr}`);
+      } catch (pfErr) {
+        console.error(`[Upgrade] Port-forward failed for ${replId}:`, pfErr);
+        socket.write('HTTP/1.1 502 Bad Gateway\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+    }
+
+    // 5. Accept Upgrade
+    wss.handleUpgrade(request, socket, head, (ws) => {
       console.log(`[Upgrade] Client connected for ${replId}`);
-      
+
+      // Attach handlers synchronously so we don't drop messages that arrive
+      // between the upgrade and any async setup work.
       rateLimiter.incrementConcurrent(userId);
-      await connectionTracker.addConnection(replId, ws);
+      startProxy(ws, resolvedRunnerAddr, replId);
 
-      // Use the runner address fetched from DB during auth
-      // This ensures we use the real k8s service DNS stored by the orchestrator
-      startProxy(ws, runnerAddr, replId);
-
-      // Cleanup on close
       ws.on('close', () => {
         rateLimiter.decrementConcurrent(userId);
+        if (usingPortForward) releaseRunnerUrl(replId);
+      });
+
+      // Track the connection in the background — failure here is non-fatal.
+      connectionTracker.addConnection(replId, ws).catch((err) => {
+        console.warn(`[Upgrade] connectionTracker.addConnection failed for ${replId}:`, err);
       });
     });
 
@@ -78,3 +111,10 @@ server.on('upgrade', async (request, socket, head) => {
 server.listen(PORT, () => {
   console.log(`[ws-backend] Server listening on port ${PORT}`);
 });
+
+for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(sig, () => {
+    shutdownAllForwards();
+    process.exit(0);
+  });
+}

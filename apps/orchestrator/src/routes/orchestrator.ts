@@ -71,7 +71,7 @@ orchestratorRouter.post('/start', zValidator('json', startSchema), async (c) => 
     return c.json(
       {
         runnerAddr: repl.runnerAddr || `ws://svc-${replId}:3001`,
-        previewUrl: repl.previewUrl || `https://${replId}.${config.previewDomain}`,
+        previewUrl: repl.previewUrl || `${config.previewScheme}://${replId}.${config.previewDomain}`,
         status: repl.status,
       },
       200,
@@ -106,7 +106,7 @@ orchestratorRouter.post('/start', zValidator('json', startSchema), async (c) => 
 
     // Step 5: Compute routing addresses
     const runnerAddr = `ws://svc-${replId}:3001`;
-    const previewUrl = `https://${replId}.${config.previewDomain}`;
+    const previewUrl = `${config.previewScheme}://${replId}.${config.previewDomain}`;
 
     // Step 6: Update DB with k8s resource names and routing info
     await client.repl.update({
