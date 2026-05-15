@@ -34,7 +34,7 @@ export function startProxy(clientWs: WebSocket, initialRunnerAddr: string, replI
       }
     });
 
-    runnerWs.on('message', (data: WebSocket.Data) => {
+    runnerWs.on('message', (data: WebSocket.Data, isBinary: boolean) => {
       if (isClientClosed) return;
 
       // Backpressure on the client socket
@@ -43,8 +43,10 @@ export function startProxy(clientWs: WebSocket, initialRunnerAddr: string, replI
         return;
       }
 
-      // Relay to client
-      clientWs.send(data);
+      // Preserve the upstream frame opcode: runner emits JSON text frames,
+      // and the browser parses event.data via JSON.parse — sending as binary
+      // would deliver a Blob and trip "Received non-JSON message".
+      clientWs.send(data, { binary: isBinary });
     });
 
     runnerWs.on('close', async () => {
